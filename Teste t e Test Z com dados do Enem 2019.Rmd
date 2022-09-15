@@ -1,0 +1,442 @@
+---
+title: 'Aplicação de testes parámetricos aos microdados do Enem: Teste-T e Teste-Z na prática'
+author: "Adauto de Galiza"
+date: "18/08/2022"
+output: html_document
+---
+### Teste-T:
+1. Este teste é aplicado quando quremos comparar duas amostras que são independentes entre si com n < 30. Uma "amostra" pode ser entendida como uma medida que represente uma amostra: média, médiana e etc.
+
+2. O teste-t é considerado paramétrico, ou seja, indicado quando buscamos inferências de uma população com base na sua média pressupondo uma distribuição normal dos dados.
+
+### Objetivo:
+Iremos selecionar um colégio com até 30 registros de candidatos e aplicaremos o teste-T para verificar se há diferenças estatísticas significantes no desempenho por gênero declarado dos vestibulandos em todas as matérias do Enem.
+
+Bibliotecas a serem utilizadas
+```{r message=FALSE, warning=FALSE}
+library(knitr)
+library(rmarkdown)
+library(RVAideMemoire) # shapiro por grupo (normalidade)
+library(dplyr)
+library(car) # teste de levene (homogeneidade)
+library(BSDA) #z test
+library(ggplot2)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+vestibulando_presente <- read.csv("vestibulando_pi_presente.csv", sep = ",")
+```
+
+Sobre o dataset: estamos utilizando um filtro nos microdados do Enem 2019 aplicados ao Estado do Piauí por motivos de eficiência computacional. Toda fase de extração e tramanento destes dados foram feitas em momento anterior a este relatório.
+
+
+O dataset de interesse possui a seguinte estrutura:
+
+```{r}
+paged_table(head(vestibulando_presente))
+```
+
+Tratando e filtrando dados de interesse
+```{r}
+## Renomeando dados no banco
+
+vestibulando_presente$TP_SEXO[vestibulando_presente$TP_SEXO == "M"] <- "Masculino"
+vestibulando_presente$TP_SEXO[vestibulando_presente$TP_SEXO == "F"] <- "Feminino"
+
+```
+```{r}
+## Verificando colégios em que n < 30
+
+vestibulando_presente %>% 
+  group_by(CO_ESCOLA) %>% 
+  summarise(qtde = n()) %>% 
+  filter(qtde < 30) %>% 
+  arrange(desc(qtde))
+
+## Criando novo dataset apenas com colégio aleatóriamente selecionado
+colegio <- vestibulando_presente %>%
+  filter(CO_ESCOLA == "22053182")
+
+## Verificando dimensoes do novo dataset
+dim(colegio)
+```
+
+
+Características do teste-T:
+
+
+1. Só deve ser aplicado se os dados apresentarem distribuição normal
+
+2. Só deve ser aplicado se existir homogeneidade das amostras
+
+3. As amostras devem ter no máximo 30 elementos (n < 30)
+
+
+### Pressupostos
+1) Verificando se os dados possuem distribuição normal em **todas as diciplinas**
+
+
+1.1. nivel de significância = 0,05
+
+
+1.2. Ho = distribuição normal se p > 0,05
+
+
+1.3. Ha = sem districuição normal se p <= 0,05
+
+
+```{r}
+
+byf.shapiro(NOTA_CN ~ TP_SEXO, colegio)
+
+# Ciências Naturais: distribuição não-normal para o grupo "feminino"
+
+```
+```{r}
+byf.shapiro(NOTA_CH ~ TP_SEXO, colegio)
+
+# Ciêcias Humanas: distribuição normal para ambos os gêneros
+```
+
+```{r}
+byf.shapiro(NOTA_MT ~ TP_SEXO, colegio)
+
+# Matemática: normalidade em ambos os gêneros
+```
+
+```{r}
+byf.shapiro(NOTA_LC ~ TP_SEXO, colegio)
+
+# Linguagens e Códigos: normalidade em ambos os gêneros
+```
+
+```{r}
+byf.shapiro(NOTA_REDACAO ~ TP_SEXO, colegio)
+
+# Redação: distribuição não-normal para grupo "masculino"
+
+## Resultado: iremos desconsiderar comparações entre os grupos para notas de Redação e Ciências Naturais
+```
+
+
+
+2) Verificando homocedasticidade das variâncias: a variabilidade dos erros deve ser constante.
+
+
+2.1) Ho = amostras homogêneas se p > 0,05
+
+
+2.2) Ha = amostras heterogêneas se p <= 0,05
+
+
+Obs: No teste de levene o parâmetro "center" serve para indicar qual métrica deve ser aplicada: média ou mediana. 
+```{r warning=FALSE}
+
+leveneTest(NOTA_CH ~ TP_SEXO, colegio, center = mean) 
+
+# Ciências Humanas: amostras homogêneas
+```
+
+```{r warning=FALSE}
+
+leveneTest(NOTA_MT ~ TP_SEXO, colegio, center = mean)
+
+# Matemática: Não há homogeneidade para nota de MT -> Necessitará de parâmetro adicional no test-t student
+```
+
+```{r warning=FALSE}
+leveneTest(NOTA_LC ~ TP_SEXO, colegio, center = mean)
+
+# Linguagens e Códigos: amostras homogêneas
+```
+
+### Aplicando teste-T de student
+i. Ho = não há diferença entre as médias das amostras se p > 0,05
+
+
+ii. Ha = existe diferença entre as médias das amostras se p <= 0,05
+
+
+iii. Nivel de significância 0,05
+
+```{r}
+t.test(NOTA_CH ~ TP_SEXO, colegio, var.equal = T) 
+
+# Ciências Humanas: p-value = 0.607
+# Não há diferenças significativas entre Masculino e Feminino com 95% de confiança.
+```
+
+```{r}
+# Em matemática o pressuposto de homogeneidade dos erros não foi atendido
+
+# Nestes casos informamos o parâmetro "var.equal" = FALSE
+
+t.test(NOTA_MT ~ TP_SEXO, colegio, var.equal = F) 
+
+# Matemática: p-value = 0.2323
+# Não há diferenças significativas entre Masculino e Feminino com 95% de confiança.
+```
+
+```{r}
+
+t.test(NOTA_LC ~ TP_SEXO, colegio, var.equal = T)
+
+# Linguagens e Códigos: p-value = 0.4875
+# Não há diferenças significativas entre Masculino e Feminino com 95% de confiança.
+```
+
+
+### Impressões gerais:
+1. Não há diferenças estatisticamente significativas para as médias das notas de CH, MT e LC entre homens e mulheres com 95% de confiança para o colégio selecionado.
+
+2. Por problemas de normalidade, não podemos comparar as notas de CN e Redação entre os gêneros
+
+
+### Analisando Graficamente:
+```{r}
+par(mfrow=c(1,3))
+boxplot(NOTA_CH ~ TP_SEXO, colegio, ylab = "Nota Humanas", xlab = "Genero", col = "grey95", title = "a")
+boxplot(NOTA_MT ~ TP_SEXO, colegio, ylab = "Nota Matemática", xlab = "Genero", col = "grey")
+boxplot(NOTA_LC ~ TP_SEXO, colegio, ylab = "Nota Linguagens", xlab = "Genero", col = "grey50")
+```
+
+### Teste-Z:
+1. O teste-Z proporciona o mesmo tipo de comparação entre amostras do teste-T, porém aqui é possível aplicar para amostras maiores de 30 elementos.
+
+2. Assim como o teste-T, teste-z também é considerado paramétrico.
+
+### Objetivo:
+Iremos filtrar do dataset apenas candidatos de escolas públicas e particulares e aplicar o teste-Z para comparar as **médias** entre os dois grupos.
+
+Antes, precisamos fazer alguns tratamentos e filtros na base:
+```{r}
+## Renoemando registros na base de dados para pública e particular
+
+vestibulando_presente$TP_ESCOLA[vestibulando_presente$TP_ESCOLA == 1] <- "Não Respondeu"
+vestibulando_presente$TP_ESCOLA[vestibulando_presente$TP_ESCOLA == "2"] <- "Pública"
+vestibulando_presente$TP_ESCOLA[vestibulando_presente$TP_ESCOLA == "3"] <- "Particular"
+vestibulando_presente$TP_ESCOLA[vestibulando_presente$TP_ESCOLA == "4"] <- "Exterior"
+```
+```{r}
+## Filtrando apenas candidatos de escolas públicas e particulares
+
+escolas <- vestibulando_presente %>%
+  filter(TP_ESCOLA %in% c("Pública", "Particular"))
+```
+
+### Verificando pressupostos:
+
+1) Verificando se os dados possuem distribuição normal em **todas as diciplinas**
+
+
+1.1. nivel de significância = 0,05
+
+
+1.2. Ho = distribuição normal se p > 0,05
+
+
+1.3. Ha = sem districuição normal se p <= 0,05
+```{r echo=FALSE, message=TRUE, warning=TRUE}
+
+# byf.shapiro(NOTA_CN ~ TP_ESCOLA, escolas)
+
+# Se executarmos o código acima teremos um erro, mas...
+```
+Problema: o teste de shapiro só pode ser aplicado para n entre 3 e 5000 amostras.
+
+
+Solução alternativa é verificar a normalidade por histogramas e Q-Q Plot: sempre existe a imprecisão de utilizar gráficos para este objetivo
+
+
+Iremos utilizar o ggplot para histogramas:
+
+```{r warning=FALSE}
+# Ciências naturais: 
+escolas %>% 
+  ggplot(aes(x = NOTA_CN)) +
+  geom_histogram(binwidth=42, color = "black" , fill = "orange") +
+  scale_x_continuous(limits = c(0, 1000))
+```
+
+```{r warning=FALSE}
+
+# Ciências humanas: 
+escolas %>% 
+  ggplot(aes(x = NOTA_CH)) +
+  geom_histogram(binwidth=42, color = "black" , fill = "brown") +
+  scale_x_continuous(limits = c(0, 1000))
+
+```
+
+```{r warning=FALSE}
+# Matemática: 
+escolas %>% 
+  ggplot(aes(x = NOTA_MT)) +
+  geom_histogram(binwidth=42, color = "black" , fill = "light blue") +
+  scale_x_continuous(limits = c(0, 1000))
+```
+
+```{r warning=FALSE}
+# Linguagens e Códigos: 
+escolas %>% 
+  ggplot(aes(x = NOTA_LC)) +
+  geom_histogram(binwidth=42, color = "black" , fill = "light green") +
+  scale_x_continuous(limits = c(0, 1000))
+```
+
+
+```{r warning=FALSE}
+# Redação: 
+escolas %>% 
+  ggplot(aes(x = NOTA_REDACAO)) +
+  geom_histogram(binwidth=70, color = "black" , fill = "purple") +
+  scale_x_continuous(limits = c(0, 1000))
+```
+
+
+### Impressões: 
+
+
+1. Alguns dadados aproximam-se levemente de uma distribuição normal
+
+2. Porém, não podemos ter certeza da normalidade.
+
+Logo, iremos comparar os histogramas com o Q-Q plot de cada nota. Atestamos normalidade se **os pontos estiverem planos sob a reta de refrência**
+
+
+```{r}
+# Ciências naturais: 
+qqnorm(escolas$NOTA_CN)
+qqline(escolas$NOTA_CN)
+```
+
+```{r}
+# Ciências humanas: 
+qqnorm(escolas$NOTA_CH)
+qqline(escolas$NOTA_CH)
+```
+
+
+```{r}
+# Matemática: 
+qqnorm(escolas$NOTA_MT)
+qqline(escolas$NOTA_MT)
+```
+
+
+```{r}
+# Linguagens e Códigos: 
+qqnorm(escolas$NOTA_LC)
+qqline(escolas$NOTA_LC)
+```
+
+
+```{r}
+# Redação: 
+qqnorm(escolas$NOTA_REDACAO)
+qqline(escolas$NOTA_REDACAO)
+```
+
+### Impressões gerais:
+
+1. Admitindo certa flexibilidade no pressuposto de normalidade além da assumida implicitamente na utilização de gráficos para esta tarefa, iremos considerar aprovados as notas de LC e CH
+
+
+2. As demais amostras poderiam ser avaliadas por testes não paramétricos, mas não é nosso objetivo aqui.
+
+
+
+### Aplicando Teste-Z
+
+Porém, antes precisamos criar vetor apenas com publicas e particulares para aplicar no test-z e calcular desv.pad
+
+```{r}
+publica2 <- escolas %>% filter(TP_ESCOLA == "Pública")
+particular3 <- escolas %>% filter(TP_ESCOLA == "Particular")
+```
+
+
+Calculo do teste-z e desv.pad por prova:
+
+i. Ho = não há diferença entre as médias das amostras se p > 0,05
+
+
+ii. Ha = existe diferença entre as médias das amostras se p <= 0,05
+
+
+iii. Nivel de significância 0,05
+
+```{r}
+# Calculando desvio-padrão para CH
+sd(publica2$NOTA_CH)
+sd(particular3$NOTA_CH)
+```
+
+No teste-Z é necessário passarmos os dois grupos a serem comparados com seus respectivos desvio-padrões
+```{r}
+## Teste-Z para Ciências Humanas
+
+z.test(publica2$NOTA_CH, sigma.x = 72.49167, particular3$NOTA_CH, sigma.y = 78.26051,
+       alternative = "two.sided")
+
+# Resultado: 
+# 1. As médias entre as escolas públicas e particulares são estatisticamente diferentes entre si com confianças de 95% nas notas de Linguagens e Códigos.
+# 2. A média das escolas públicas é 469.71 e das particulares 565.28 no quesito CH
+```
+
+
+```{r}
+# Calculando desvio-padrão para LC
+sd(publica2$NOTA_LC)
+sd(particular3$NOTA_LC)
+```
+
+
+```{r}
+## Teste-Z para Linguagens e Códigos
+
+z.test(publica2$NOTA_LC, sigma.x = 61.99294, particular3$NOTA_LC, sigma.y = 58.21809,
+       alternative = "two.sided")
+
+# Resultado: 
+# 1. As médias entre as escolas públicas e particulares são estatisticamente diferentes entre si com confianças de 95% nas notas de Linguagens e Códigos.
+# 2. A média das escolas públicas é 486.36 e das particulares 563.90 no quesito LC
+```
+
+
+
+Graficamente, podemos analisar os boxplot's entre os grupos aprovados nos presuspostos:
+
+```{r}
+# Linguagens e Códigos
+escolas %>% 
+  ggplot(aes(x = TP_ESCOLA, y = NOTA_LC)) +
+  geom_boxplot(aes(fill = TP_ESCOLA), show.legend = F) +
+  labs(title = "Boxplot para nota em Linguagens e Códigos por tipo de Escola") +
+  xlab(" ") +
+  ylab("Nota") +
+  scale_fill_brewer(palette="Pastel1") +
+  theme_bw()
+```
+
+```{r}
+# Ciências Humanas 
+escolas %>% 
+  ggplot(aes(x = TP_ESCOLA, y = NOTA_CH)) +
+  geom_boxplot(aes(fill = TP_ESCOLA), show.legend = F) +
+  labs(title = "Boxplot para nota em Ciências Humanas por tipo de Escola") +
+  xlab(" ") +
+  ylab("Nota") +
+  scale_fill_brewer(palette = "Accent") +
+  theme_bw()
+
+```
+
+
+### Conclusões:
+1. Por problemas de pressupostos e admitindo certa flexibilidade aplicamos o teste-Z apenas nas notas de Linguagens e Ciências Humanas
+
+2. Nestas o desempenho das escolas publicas e particulares apresenta diferenças estasticimante significantes com 95% de confiança
+
+
+3. Em média, as escolas particulares desempenham melhor que as públicas nas provas comparadas com 95% de confiança.

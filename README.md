@@ -1,2 +1,2 @@
 # enem2019-testes-parametricos
-Dataset and Rmarkdown
+O objetivo neste projeto foi aplicar testes paramétricos aos microdados do Enem 2019. Nesta ocasião, trabalhei com um filtro do dataset original, incluindo apenas dados do Estado do Piauí. No relatório, através da linguagem R, proponho testes de hipóteses para comparar desempenho nas disciplinas do Enem entre duas categorias de candidatos: separados por gênero declarado e por tipo de escola (pública ou particular). Para manipulação de dados utilizo a biblioteca dplyr e uma série de pacotes estatísticos para testagem de pressupostos e aplicação dos testes propriamente ditos, além de utilizar o ggplot2 para gerar algumas visualizações. 
